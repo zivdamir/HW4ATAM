@@ -1,22 +1,18 @@
 #include <stdio.h>
-//#include <sys/mman.h>
 #include <stdlib.h>
-//#include <fcntl.h>
-//#include <unistd.h>
 #include "elf64.h"
 #include <string.h>
-#include <errno.h>
 
 #define MAX_NAME 256
 
 
 void part1_function(Elf64_Ehdr *Ehdr, FILE* fd, char* filename);
 
-void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name);//part 2+3+4
+void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** argv);//part 2+3+4
 
-void part5_function(FILE* fd, Elf64_Ehdr *Ehdr);
+void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strtab_offset);
 
-void part6_function(FILE* fd, Elf64_Ehdr *Ehdr,unsigned long address);
+void part6_function(FILE* fd, Elf64_Ehdr *Ehdr,unsigned long address, char** argv);
 
 int main(int argc, char **argv)
 {
@@ -37,8 +33,8 @@ int main(int argc, char **argv)
         fclose(fd);
         exit(1);
     }
-//    part1_function(Ehdr, fd,argv[2]);
-    part2_4_function(Ehdr, fd,argv[1]);
+    part1_function(Ehdr, fd,argv[2]);
+    part2_4_function(Ehdr, fd,argv[1], argv);
 
 
 
@@ -50,7 +46,6 @@ int main(int argc, char **argv)
 
 void part1_function(Elf64_Ehdr *Ehdr, FILE* fd, char* filename)
 {
-
     if(Ehdr->e_type != 2) //TODO, maybe char or int casting
     {
         printf("PRF:: %s not an executable! :(\n", filename);
@@ -61,43 +56,43 @@ void part1_function(Elf64_Ehdr *Ehdr, FILE* fd, char* filename)
 }
 
 
-void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name)
+void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** argv)
 {
     // todo dont forget to free!!
-    if (fseek(fd, 0, SEEK_SET) != 0)
-    {
-        fclose(fd);
-        free(Ehdr);
-        exit(1);
-    }
+    int error_flag = 0;
     Elf64_Shdr *Shdr = (Elf64_Shdr *) malloc(sizeof(*Shdr));
     if (Shdr == NULL)
     {
+        free(Ehdr);
         fclose(fd);
         exit(1);
     }
     //section header entry
     unsigned long strtab_section_index = Ehdr->e_shstrndx;
     long strtab_offset = Ehdr->e_shoff + (strtab_section_index * Ehdr->e_shentsize);
-    if (fseek(fd, strtab_offset, SEEK_CUR) != 0)
+    if (fseek(fd, strtab_offset, SEEK_SET) != 0)
     {
-        fclose(fd);
-        free(Shdr);
-        free(Ehdr);
-        exit(1);
+        error_flag++;
     }
     Elf64_Shdr *Shdr_sym = (Elf64_Shdr *) malloc(sizeof(*Shdr));
     if (Shdr_sym== NULL)
     {
+        error_flag++;
+    }
+    if(error_flag > 0)
+    {
         free(Shdr);
         fclose(fd);
         free(Ehdr);
         exit(1);
+
     }
     //problem here
     if(fread(Shdr_sym, Ehdr->e_shentsize, 1, fd) != 1)
-    {//TODO
-
+    {
+        free(Shdr);
+        fclose(fd);
+        free(Ehdr);
         exit(1);
     }
     unsigned long sym_offset = Shdr_sym->sh_offset;
@@ -109,29 +104,28 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name)
 //    //str_tab
     int i = 0;
     char* section_name = (char*)malloc(MAX_NAME);
-    if(section_name==NULL)
+    if(section_name == NULL)
     {
-        fclose(fd);
-        free(Shdr);
-        free(Ehdr);
-        free(section_name);
-        exit(1);
+        error_flag++;
     }
     Elf64_Shdr *Shdr_tab = (Elf64_Shdr *) malloc(sizeof(*Shdr));//this is str tab
-    if (Shdr_tab== NULL)
+    if (Shdr_tab == NULL)
     {
-        free(Shdr);
-        fclose(fd);
-        free(Ehdr);
-        exit(1);
+        error_flag++;
+        free(section_name);
     }
     Elf64_Shdr *Shdr_symtab = (Elf64_Shdr *) malloc(sizeof(*Shdr));//this is str tab
     if (Shdr_symtab== NULL)
     {
-        free(Shdr);
-        fclose(fd);
-        free(Ehdr);
+        error_flag++;
+        free(section_name);
         free(Shdr_tab);
+    }
+    if(error_flag > 0)
+    {
+        fclose(fd);
+        free(Shdr);
+        free(Ehdr);
         exit(1);
     }
     int flag = 0;
@@ -306,48 +300,196 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name)
     if(Sym->st_shndx==SHN_UNDEF)
     {
         free(Sym);
-        part5_function(fd, Ehdr);
+        part5_function(fd, Ehdr, argv, sym_offset);
     }
     else
     {
-        unsigned long mid_address = (Sym->st_shndx)*(Ehdr->e_shentsize)+Ehdr->e_shoff;
-        Elf64_Shdr *Shdr_txt = (Elf64_Shdr*) malloc(sizeof(*Shdr_txt));
-        if (Shdr_txt == NULL)
-        {
-            fclose(fd);
-            free(Ehdr);
-            free(Sym);
-            exit(1);
-        }
-        if (fseek(fd, mid_address, SEEK_SET) != 0)
-        {
-            fclose(fd);
-            free(Ehdr);
-            free(Sym);
-            free(Shdr_txt);
-            exit(1);
-        }
-        if (fread(Shdr_txt, sizeof(*Shdr_txt), 1, fd) != 1)
-        {
-            fclose(fd);
-            free(Ehdr);
-            free(Sym);
-            free(Shdr_txt);
-            exit(1);
-        }
-        address = Shdr_txt->sh_offset + Sym->st_value;
+        address = Sym->st_value;
         free(Sym);
-        part6_function(fd, Ehdr, address);
+        part6_function(fd, Ehdr, address, argv);
     }
 }
 
-void part5_function(FILE* fd, Elf64_Ehdr *Ehdr)
+void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strtab_offset)
 {
+ //Here the function is global and undef in the symtab. now we need to find the address in the plt which refferences to foo
+//find rela.plt
+//find entry in the rela.plt with sym. name = function
+//find offset of this entry. the offset is the wanted address
+    Elf64_Shdr *Shdr_rela_plt = (Elf64_Shdr *) malloc(sizeof(*Shdr_rela_plt));//this is str tab
+    if (Shdr_rela_plt== NULL)
+    {
+        fclose(fd);
+        free(Ehdr);
+        exit(1);
+    }
+
+    Elf64_Shdr *Shdr_dynsym = (Elf64_Shdr *) malloc(sizeof(*Shdr_dynsym));//this is str tab
+    if (Shdr_dynsym== NULL)
+    {
+        fclose(fd);
+        free(Shdr_rela_plt);
+        free(Ehdr);
+        exit(1);
+    }
+    //THIS IS TEMPORARY
+    Elf64_Shdr *Temp_shdr_entry = (Elf64_Shdr *) malloc(sizeof(*Temp_shdr_entry));//this is str tab
+    if (Temp_shdr_entry== NULL)
+    {
+        free(Shdr_rela_plt);
+        free(Shdr_dynsym);
+        fclose(fd);
+        free(Ehdr);
+        exit(1);
+    }
+    char* section_name = (char*)malloc(MAX_NAME);
+    if(section_name == NULL)
+    {
+        free(Temp_shdr_entry);
+        fclose(fd);
+        free(Shdr_dynsym);
+        free(Shdr_rela_plt);
+        free(Ehdr);
+        exit(1);
+    }
+    int i = 0;
+    int flag = 0;
+    while (1)
+    {
+        if (fseek(fd, Ehdr->e_shoff + i * Ehdr->e_shentsize, SEEK_SET) != 0)
+        {
+            free(Temp_shdr_entry);
+            fclose(fd);
+            free(Shdr_rela_plt);
+            free(Shdr_dynsym);
+            free(Ehdr);
+            free(section_name);
+            exit(1);
+        }
+        if (fread(Temp_shdr_entry, sizeof(*Temp_shdr_entry), 1, fd) != 1)
+        {
+            free(Temp_shdr_entry);
+            fclose(fd);
+            free(Shdr_rela_plt);
+            free(Shdr_dynsym);
+            free(section_name);
+            free(Ehdr);
+            exit(1);
+        }
+        if (fseek(fd, strtab_offset + Temp_shdr_entry->sh_name + 1, SEEK_SET) != 0) //move to strtab + offset
+        {
+            free(Temp_shdr_entry);
+            fclose(fd);
+            free(section_name);
+            free(Shdr_rela_plt);
+            free(Shdr_dynsym);
+            free(Ehdr);
+            exit(1);
+        }
+
+        for (int j = 0;; j++)
+        {
+            if (fread(&section_name[j], 1, 1, fd) != 1)
+            {
+                free(Temp_shdr_entry);
+                fclose(fd);
+                free(Shdr_rela_plt);
+                free(section_name);
+                free(Shdr_dynsym);
+                free(Ehdr);
+                exit(1);
+            }
+            if (*(section_name + j) == '\0') break;
+        }
+        if (strcmp("rela.plt", section_name) == 0)
+        {
+            flag++;
+            *Shdr_rela_plt = *Temp_shdr_entry;
+            if(flag == 2) break; //if break, rela_plt and dynsym is loaded
+        }
+        if (strcmp("dynsym", section_name) == 0)
+        {
+            flag++;
+            *Shdr_dynsym = *Temp_shdr_entry;
+            if(flag == 2) break; //if break, rela_plt and dynsym is loaded
+        }
+        i++;
+    }
+    free(Temp_shdr_entry);
+    Elf64_Rela* func_rela_entry = (Elf64_Rela*)malloc(sizeof(*func_rela_entry));
+    if(func_rela_entry == NULL)
+    {
+     fclose(fd);
+     free(Shdr_rela_plt);
+     free(Shdr_dynsym);
+     free(Ehdr);
+     free(section_name);
+     exit(1);
+    }
+    i = 0;
+    while (1)
+    {
+        if (fseek(fd, Shdr_rela_plt->sh_offset + i * sizeof(*func_rela_entry), SEEK_SET) != 0) //
+        {
+            free(func_rela_entry);
+            fclose(fd);
+            free(Shdr_rela_plt);
+            free(Shdr_dynsym);
+            free(Ehdr);
+            free(section_name);
+            exit(1);
+        }
+        if (fread(func_rela_entry, sizeof(*func_rela_entry), 1, fd) != 1)
+        {
+            free(func_rela_entry);
+            fclose(fd);
+            free(Shdr_rela_plt);
+            free(Shdr_dynsym);
+            free(section_name);
+            free(Ehdr);
+            exit(1);
+        }
+        if (fseek(fd, Shdr_dynsym->sh_offset + ELF64_R_SYM(func_rela_entry->r_info), SEEK_SET) != 0) //move to strtab + offset
+        {
+            free(func_rela_entry);//todo
+            fclose(fd);
+            free(section_name);
+            free(Shdr_rela_plt);
+            free(Shdr_dynsym);
+            free(Ehdr);
+            exit(1);
+        }
+
+        for (int j = 0;; j++)
+        {
+            if (fread(&section_name[j], 1, 1, fd) != 1)
+            {
+                free(func_rela_entry);
+                fclose(fd);
+                free(Shdr_rela_plt);
+                free(section_name);
+                free(Shdr_dynsym);
+                free(Ehdr);
+                exit(1);
+            }
+            if (*(section_name + j) == '\0') break;
+        }
+        if (strcmp(argv[1], section_name) == 0)
+        {
+            break; //if break, rela_plt and dynsym is loaded
+        }
+        i++;
+    }
+    unsigned long address = func_rela_entry->r_offset;
+    free(Shdr_dynsym);
+    free(section_name);
+    free(Shdr_rela_plt);
+    free(func_rela_entry);
+    part6_function(fd,Ehdr,address,argv);
 
 }
 
-void part6_function(FILE* fd, Elf64_Ehdr *Ehdr, unsigned long address)
+void part6_function(FILE* fd, Elf64_Ehdr *Ehdr, unsigned long address, char** argv)
 {
-    printf("the andress is: %lu", address);
-
+    deb(argv+2, address);
 }
