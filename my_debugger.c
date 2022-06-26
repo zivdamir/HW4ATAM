@@ -45,67 +45,6 @@ pid_t run_target(const char* programname, char** argv)
     }
 }
 
-void run_breakpoint_debugger_old(pid_t child_pid,  long* address, int dyn_flag)
-{
-    int wait_status;
-    struct user_regs_struct regs;
-    int count = 1;
-    /* Wait for child to stop on its first instruction */
-    wait(&wait_status);
-
-    /* Look at the word at the address we're interested in */
-     long addr = *address; //OLD ADDRESS
-    if(dyn_flag == 1)
-    {
-        addr = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)address, NULL);
-    }
-    //same
-    unsigned long func_orig_opcode = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)addr, NULL); //original opcode where breakpoint is going to be set
-    unsigned long data_trap = (func_orig_opcode & 0xFFFFFFFFFFFFFF00) | 0xCC;//change opcode to have breakpoint
-    //same
-    unsigned long return_from_func_address, return_from_func_orig_opcode, return_from_func_trap;//
-    ptrace(PTRACE_POKETEXT, child_pid, (void *) addr, (void *) data_trap);
-    ptrace(PTRACE_CONT, child_pid, 0, 0); //continue to the function
-    wait(&wait_status);
-    while(WIFSTOPPED(wait_status))
-    {
-        //restore opcode
-        ptrace(PTRACE_POKETEXT, child_pid, (void*)addr, (void*)func_orig_opcode);
-        //restore rip
-        ptrace(PTRACE_GETREGS, child_pid, 0, &regs);
-        regs.rip -= 1;
-        ptrace(PTRACE_SETREGS, child_pid, 0, &regs);
-        //place second breakpoint
-        return_from_func_address = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)regs.rsp, NULL);
-        return_from_func_orig_opcode = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)return_from_func_address, NULL);
-        return_from_func_trap = (return_from_func_orig_opcode & 0xFFFFFFFFFFFFFF00) | 0xCC;
-        ptrace(PTRACE_POKETEXT, child_pid, (void *) return_from_func_address, (void *) return_from_func_trap);
-        /* The child can continue running now */
-        ptrace(PTRACE_CONT, child_pid, 0, 0); //continue to the function
-        //wait until return from the function
-        wait(&wait_status);
-
-
-        //restore second breakpoint orig opcode
-        ptrace(PTRACE_POKETEXT, child_pid, (void *) return_from_func_address, (void *) return_from_func_orig_opcode);
-        //restore rip
-        ptrace(PTRACE_GETREGS, child_pid, 0, &regs);
-        regs.rip -= 1;
-        ptrace(PTRACE_SETREGS, child_pid, 0, &regs);
-        //print return value from the function
-        printf("PRF:: run #%d returned with %d\n", count, (int)regs.rax);
-        count++;
-        //place breakpoint in the function
-        func_orig_opcode = ptrace(PTRACE_PEEKTEXT, child_pid, (void*)addr, NULL);
-        data_trap = (func_orig_opcode & 0xFFFFFFFFFFFFFF00) | 0xCC;
-        ptrace(PTRACE_POKETEXT, child_pid, (void *) addr, (void *) data_trap);
-        //continue to the function
-        ptrace(PTRACE_CONT, child_pid, 0, 0);
-        wait(&wait_status);
-    }
-    ptrace(PTRACE_POKETEXT, child_pid, (void *) address, (void *) func_orig_opcode);
-}
-
 void run_breakpoint_debugger(pid_t child_pid,long *address, int dyn_flag)
 {
     int wait_status;

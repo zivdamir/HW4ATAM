@@ -58,7 +58,6 @@ void part1_function(Elf64_Ehdr *Ehdr, FILE* fd, char* filename)
 
 void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** argv)
 {
-    // todo dont forget to free!!
     int error_flag = 0;
     Elf64_Shdr *Shdr = (Elf64_Shdr *) malloc(sizeof(*Shdr));
     if (Shdr == NULL)
@@ -97,11 +96,7 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
     }
     unsigned long sym_offset = Shdr_sym->sh_offset;
     free(Shdr_sym);
-    //Sym_tab
-//    Elf64_Sym* sym_tab=(Elf64_Sym*)malloc(sizeof(*sym_tab));
-//    if(fseek(fd, strtab_offset, SEEK_CUR)!=0) exit(1) ;
-//    if(fread(fd,sizeof(Elf64_Shdr),1,sym_tab)!=1) exit(1);
-//    //str_tab
+
     int i = 0;
     char* section_name = (char*)malloc(MAX_NAME);
     if(section_name == NULL)
@@ -437,7 +432,7 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
         free(section_name);
         exit(1);
     }
-    Elf64_Shdr * Shdr_strtab = (Elf64_Shdr*)malloc(sizeof(*Shdr_strtab)); //todo*
+    Elf64_Shdr * Shdr_strtab = (Elf64_Shdr*)malloc(sizeof(*Shdr_strtab)); 
     if(Shdr_strtab == NULL)
     {
         free(func_rela_entry);
@@ -541,7 +536,6 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
                 free(Ehdr);
                 exit(1);
             }
-            //printf("next char: %c\n", *(section_name+j));
             if (*(section_name + j) == '\0')
             {
                 break;
