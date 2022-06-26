@@ -12,7 +12,7 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
 
 void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strtab_offset);
 
-void part6_function(FILE* fd, Elf64_Ehdr *Ehdr,unsigned long address, char** argv);
+void part6_function(FILE* fd, Elf64_Ehdr *Ehdr,unsigned long address, char** argv, int dyn_flag);
 
 int main(int argc, char **argv)
 {
@@ -306,7 +306,7 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
     {
         address = Sym->st_value;
         free(Sym);
-        part6_function(fd, Ehdr, address, argv);
+        part6_function(fd, Ehdr, address, argv, 0);
     }
 }
 
@@ -437,8 +437,8 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
         free(section_name);
         exit(1);
     }
-    Elf64_Sym * strdym_entry = (Elf64_Sym*)malloc(sizeof(*strdym_entry)); //todo*
-    if(strdym_entry == NULL)
+    Elf64_Shdr * Shdr_strtab = (Elf64_Shdr*)malloc(sizeof(*Shdr_strtab)); //todo*
+    if(Shdr_strtab == NULL)
     {
         free(func_rela_entry);
         fclose(fd);
@@ -495,7 +495,7 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
             free(Ehdr);
             exit(1);
         }
-        if (fseek(fd, Ehdr->e_shoff+(Ehdr->e_shentsize)*(Shdr_dynsym->sh_link), SEEK_SET) != 0) //move to strdym
+        if (fseek(fd, Ehdr->e_shoff+(Ehdr->e_shentsize)*(Shdr_dynsym->sh_link), SEEK_SET) != 0) //move to strtab
         {
             free(func_rela_entry);
             free(Dymsym_entry);
@@ -506,7 +506,7 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
             free(Ehdr);
             exit(1);
         }
-        if(fread(strdym_entry, sizeof(*Dymsym_entry), 1, fd) != 1)
+        if(fread(Shdr_strtab, sizeof(*Shdr_strtab), 1, fd) != 1)
         {
             free(Dymsym_entry);
             free(func_rela_entry);
@@ -516,8 +516,8 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
             free(section_name);
             free(Ehdr);
             exit(1);
-        }
-        if (fseek(fd, strdym_entry->st_value + Dymsym_entry->st_name*Dymsym_entry->st_size+1, SEEK_SET) != 0)
+        }// not good
+        if (fseek(fd, Shdr_strtab->sh_offset + Dymsym_entry->st_name, SEEK_SET) != 0)
         {
             free(Dymsym_entry);
             free(func_rela_entry);
@@ -553,17 +553,21 @@ void part5_function(FILE* fd, Elf64_Ehdr *Ehdr, char** argv, unsigned long strta
         }
         i++;
     }
+    //find strtab header and find offset according to:
+    //rela entry
+    //dynsym enrty in according to rela entry offset - using macro end dynsym_entry size
+    //strtab entry according to offset from file and dynsym_entry.name
     unsigned long address = func_rela_entry->r_offset;
     free(Dymsym_entry);
     free(Shdr_dynsym);
     free(section_name);
     free(Shdr_rela_plt);
     free(func_rela_entry);
-    part6_function(fd,Ehdr,address,argv);
+    part6_function(fd,Ehdr,address,argv, 1);
 
 }
 
-void part6_function(FILE* fd, Elf64_Ehdr *Ehdr, unsigned long address, char** argv)
+void part6_function(FILE* fd, Elf64_Ehdr *Ehdr, unsigned long address, char** argv, int dyn_flag)
 {
-    deb(argv+2, address);
+    deb(argv+2, address, dyn_flag);
 }
