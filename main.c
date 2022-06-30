@@ -263,14 +263,19 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
         }
         if (strcmp(function_name, sym_name) == 0)
         {
-            if(ELF64_ST_BIND(Sym->st_info) == 1)
+            if(ELF64_ST_BIND(Sym->st_info) != 1)
+            {
+                flag_global = 2;
+            }
+            else
             {
                 flag_global = 1;
                 break;
+
             }
         }
     }
-    if(i==num_syms)
+    if(i==num_syms && flag_global != 2)
     {
         printf("PRF:: %s not found!\n" , function_name);
         fclose(fd);
@@ -282,7 +287,7 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
         free(Shdr_symtab);
         exit(0);
     }
-    if(flag_global != 1);
+    if(flag_global == 2)
     {
         printf("PRF:: %s is not a global symbol! :(\n", function_name);
         fclose(fd);
