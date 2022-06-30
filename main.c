@@ -211,6 +211,7 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
         free(Shdr_symtab);
         exit(1);
     }
+    int flag_global = 0;
     for (i = 0; i < num_syms; i++)
     {
         if (fseek(fd, symtab_offset + i * sizeof(*Sym), SEEK_SET) != 0)
@@ -261,7 +262,13 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
             if(*(sym_name+j) == '\0') break;
         }
         if (strcmp(function_name, sym_name) == 0)
-            break; //found the function!
+        {
+            if(ELF64_ST_BIND(Sym->st_info) == 1)
+            {
+                flag_global = 1;
+                break;
+            }
+        }
     }
     if(i==num_syms)
     {
@@ -275,7 +282,7 @@ void part2_4_function(Elf64_Ehdr *Ehdr, FILE* fd, char* function_name, char** ar
         free(Shdr_symtab);
         exit(0);
     }
-    if(ELF64_ST_BIND(Sym->st_info) != 1)
+    if(flag_global != 1);
     {
         printf("PRF:: %s is not a global symbol! :(\n", function_name);
         fclose(fd);
